@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TextInput, Image, SafeAreaView, TouchableOpacit
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/components/config/firebase"; 
 import { useRouter } from "expo-router";
+import colors from "@/colors"; 
+
 const backImage = require("@/assets/images/backImage.png");
 
 export default function Login() {
@@ -50,12 +52,12 @@ export default function Login() {
           onChangeText={(text) => setPassword(text)}
         />
         <TouchableOpacity style={styles.button} onPress={onHandleLogin}>
-          <Text style={{ fontWeight: "bold", color: "#fff", fontSize: 18 }}>Log In</Text>
+          <Text style={styles.buttonText}>Log In</Text>
         </TouchableOpacity>
-        <View style={{ marginTop: 20, flexDirection: "row", alignItems: "center", alignSelf: "center" }}>
-          <Text style={{ color: "gray", fontWeight: "600", fontSize: 14 }}>Don't have an account? </Text>
+        <View style={styles.signupContainer}>
+          <Text style={styles.signupText}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => router.push("/signup")}>
-            <Text style={{ color: "#f57c00", fontWeight: "600", fontSize: 14 }}>Sign Up</Text>
+            <Text style={styles.signupLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -67,12 +69,12 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   title: {
     fontSize: 36,
     fontWeight: "bold",
-    color: "orange",
+    color: colors.primary, 
     alignSelf: "center",
     paddingBottom: 24,
   },
@@ -83,6 +85,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderRadius: 10,
     padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border, 
   },
   backImage: {
     width: "100%",
@@ -96,7 +100,7 @@ const styles = StyleSheet.create({
     height: "75%",
     position: "absolute",
     bottom: 0,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     borderTopLeftRadius: 60,
   },
   form: {
@@ -105,11 +109,37 @@ const styles = StyleSheet.create({
     marginHorizontal: 30,
   },
   button: {
-    backgroundColor: "#f57c00",
+    backgroundColor: colors.primary,
     height: 58,
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  buttonText: {
+    fontWeight: "bold",
+    color: "#fff",
+    fontSize: 18,
+  },
+  signupContainer: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  signupText: {
+    color: colors.gray,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  signupLink: {
+    color: colors.primary,
+    fontWeight: "600",
+    fontSize: 14,
   },
 });

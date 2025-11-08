@@ -17,6 +17,7 @@ import {
   setDoc,
   updateDoc,
   arrayUnion,
+  serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/components/config/firebase";
 import { signOut } from "firebase/auth";
@@ -24,66 +25,116 @@ import { Plus, LogOut } from "lucide-react-native";
 import colors from "@/colors";
 import { OWNER_UID } from "@/constant";
 
-const DEFAULT_ROOM_ID = "default-room";
+// ID phòng mặc định cho mọi user
+const DEFAULT_ROOM_ID = "PHONGCHUNG";
+const DEFAULT_ROOM_NAME = "Phòng Chung";
 
 export default function Home() {
   const router = useRouter();
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const currentUser = auth.currentUser;
 
-  // Lắng nghe danh sách phòng
-  useEffect(() => {
-  if (!auth.currentUser) return;
+  // Tạo phòng mặc định nếu chưa có
+  const ensureDefaultRoomExists = async () => {
+    if (!currentUser) return;
 
-  const myRoomsRef = collection(db, "users", auth.currentUser.uid, "myRooms");
-  const unsubscribe = onSnapshot(myRoomsRef, async (snapshot) => {
-    const list: any[] = [];
+    const roomRef = doc(db, "rooms", DEFAULT_ROOM_ID);
+    const roomSnap = await getDoc(roomRef);
 
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const roomRef = doc(db, "rooms", data.roomId);
-      const roomSnap = await getDoc(roomRef);
-
-      if (roomSnap.exists()) {
-        const roomData = roomSnap.data();
-        list.push({
-          id: data.roomId,
-          name: roomData.name || data.roomId,
-          online: roomData.onlineUsers?.length || 0,
-          max: roomData.maxUsers || 40,
-        });
-      }
+    if (!roomSnap.exists()) {
+      // Tạo phòng chung lần đầu
+      await setDoc(roomRef, {
+        name: DEFAULT_ROOM_NAME,
+        maxUsers: 100,
+        onlineUsers: [],
+        createdBy: "system",
+        createdAt: serverTimestamp(),
+      });
+      console.log("Phòng Chung đã được tạo tự động!");
     }
 
-    // Sắp xếp phòng mới lên đầu
-    list.sort((a, b) => b.online - a.online);
+    // Thêm user vào myRooms nếu chưa có
+    const userRoomRef = doc(db, "users", currentUser.uid, "myRooms", DEFAULT_ROOM_ID);
+    const userRoomSnap = await getDoc(userRoomRef);
 
-    setRooms(list);
-    setLoading(false);
-  });
+    if (!userRoomSnap.exists()) {
+      await setDoc(userRoomRef, {
+        roomId: DEFAULT_ROOM_ID,
+        name: DEFAULT_ROOM_NAME,
+        joinedAt: new Date(),
+      });
 
-  return unsubscribe;
-}, []);
+      // Cập nhật onlineUsers
+      await updateDoc(roomRef, {
+        onlineUsers: arrayUnion(currentUser.uid),
+      });
+    }
+  };
+
+  // Lắng nghe danh sách phòng của user
+  useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
+    ensureDefaultRoomExists();
+
+    const myRoomsRef = collection(db, "users", currentUser.uid, "myRooms");
+    const unsubscribe = onSnapshot(myRoomsRef, async (snapshot) => {
+      const list: any[] = [];
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const roomRef = doc(db, "rooms", data.roomId);
+        const roomSnap = await getDoc(roomRef);
+
+        if (roomSnap.exists()) {
+          const roomData = roomSnap.data();
+          list.push({
+            id: data.roomId,
+            name: roomData.name || data.roomId,
+            online: roomData.onlineUsers?.length || 0,
+            max: roomData.maxUsers || 40,
+          });
+        }
+      }
+
+      // Sắp xếp: Phòng Chung lên đầu, sau đó là online nhiều nhất
+      list.sort((a, b) => {
+        if (a.id === DEFAULT_ROOM_ID) return -1;
+        if (b.id === DEFAULT_ROOM_ID) return 1;
+        return b.online - a.online;
+      });
+
+      setRooms(list);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [currentUser]);
 
   // Join phòng
   const joinRoom = async (roomId: string) => {
-    if (!auth.currentUser) return;
+    if (!currentUser) return;
 
     const roomRef = doc(db, "rooms", roomId);
     const roomSnap = await getDoc(roomRef);
     if (!roomSnap.exists()) {
-      Alert.alert("Error", "Room not found");
+      Alert.alert("Lỗi", "Không tìm thấy phòng!");
       return;
     }
 
-    const online = roomSnap.data()?.onlineUsers?.length || 0;
-    if (online >= 40) {
-      Alert.alert("Full", "Room is full! Please wait.");
+    const roomData = roomSnap.data();
+    const online = roomData.onlineUsers?.length || 0;
+    if (online >= (roomData.maxUsers || 40)) {
+      Alert.alert("Đầy", "Phòng đã đầy! Vui lòng đợi.");
       return;
     }
 
     await updateDoc(roomRef, {
-      onlineUsers: arrayUnion(auth.currentUser.uid),
+      onlineUsers: arrayUnion(currentUser.uid),
     });
 
     router.push({ pathname: "/chat/[roomId]", params: { roomId } });
@@ -92,31 +143,35 @@ export default function Home() {
   // Logout
   const handleLogout = async () => {
     try {
-    console.log("Starting logout...");
-    await signOut(auth);
-    console.log("Firebase signOut success");
-    // Force redirect nếu cần
-    router.replace('/login');
-  } catch (error: any) {
-    console.error("Logout error:", error.code, error.message);
-    Alert.alert('Logout Error', error.message || 'Something went wrong');
-  }
-};
+      await signOut(auth);
+      router.replace('/login');
+    } catch (error: any) {
+      Alert.alert('Lỗi đăng xuất', error.message);
+    }
+  };
 
-  if (loading) return <Text style={{ textAlign: "center", marginTop: 50 }}>Loading rooms...</Text>;
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Đang tải phòng chat...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header: Avatar + Tên + Logout */}
+      {/* Header */}
       <View style={styles.header}>
         <Image
-          source={{ uri: auth.currentUser?.photoURL || "https://i.pravatar.cc/100" }}
+          source={{ uri: currentUser?.photoURL || `https://i.pravatar.cc/150?u=${currentUser?.uid}` }}
           style={styles.avatar}
         />
-        <Text style={styles.username}>{auth.currentUser?.displayName || "User"}</Text>
+        <Text style={styles.username}>
+          {currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'}
+        </Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <LogOut size={20} color="red" />
-          <Text style={styles.logoutText}>Logout</Text>
+          <LogOut size={22} color={colors.accentRed} />
+          <Text style={styles.logoutText}>Thoát</Text>
         </TouchableOpacity>
       </View>
 
@@ -124,79 +179,169 @@ export default function Home() {
       <FlatList
         data={rooms}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingTop: 10, paddingBottom: 100 }}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.room} onPress={() => joinRoom(item.id)}>
-          <Text style={styles.roomName}>{item.name || item.id}</Text>
-            <Text style={styles.online}>{item.online}/40 online</Text>
+            <View>
+              <Text style={styles.roomName}>
+                {item.name}
+                {item.id === DEFAULT_ROOM_ID && " (Mặc định)"}
+              </Text>
+              <Text style={styles.roomId}>ID: {item.id}</Text>
+            </View>
+            <Text style={styles.online}>
+              {item.online}/{item.max} online
+            </Text>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={{ textAlign: "center", color: "gray" }}>No rooms yet</Text>}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Chưa có phòng nào</Text>
+        }
       />
 
-      {/* Nút Create (chỉ admin) */}
-      {auth.currentUser?.uid === OWNER_UID && (
+      {/* Nút FAB */}
+      {currentUser?.uid === OWNER_UID && (
         <TouchableOpacity
           style={[styles.fab, styles.createFab]}
           onPress={() => router.push("/create-room")}
         >
-          <Plus size={24} color="#fff" />
-          <Text style={styles.fabText}>Create</Text>
+          <Plus size={26} color="#fff" />
+          <Text style={styles.fabText}>Tạo phòng</Text>
         </TouchableOpacity>
       )}
 
-      {/* Nút Join (ai cũng được) */}
       <TouchableOpacity
         style={[styles.fab, styles.joinFab]}
         onPress={() => router.push("/join-room")}
       >
-        <Text style={styles.fabText}>Join</Text>
+        <Text style={styles.fabText}>Tham gia</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.gray,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#eee",
-    backgroundColor: "#f9f9f9",
+    padding: 16,
+    borderBottomWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  username: { marginLeft: 10, fontWeight: "600", fontSize: 16, flex: 1 },
-  logoutBtn: { flexDirection: "row", alignItems: "center" },
-  logoutText: { color: "red", marginLeft: 5, fontSize: 14 },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  username: {
+    marginLeft: 12,
+    fontWeight: "bold",
+    fontSize: 18,
+    flex: 1,
+    color: colors.primary,
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    backgroundColor: "#fee2e2",
+    borderRadius: 12,
+  },
+  logoutText: {
+    color: colors.accentRed,
+    marginLeft: 6,
+    fontWeight: "600",
+    fontSize: 14,
+  },
 
   room: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderColor: "#eee",
+    alignItems: "center",
+    padding: 18,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  roomName: { fontWeight: "600", fontSize: 16 },
-  online: { color: "#666", fontSize: 14 },
+  roomName: {
+    fontWeight: "700",
+    fontSize: 17,
+    color: "#1f2937",
+  },
+  roomId: {
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: 4,
+  },
+  online: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: "600",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: colors.gray,
+    fontSize: 16,
+    marginTop: 50,
+  },
 
   fab: {
     position: "absolute",
     right: 20,
-    bottom: 30,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 140,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5,
+    elevation: 10,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
     flexDirection: "row",
   },
-  createFab: { backgroundColor: colors.primary || "#f57c00", bottom: 100 },
-  joinFab: { backgroundColor: "#666", bottom: 30 },
-  fabText: { color: "#fff", fontWeight: "600", marginLeft: 5 },
+  createFab: {
+    backgroundColor: colors.primary,
+    bottom: 100,
+  },
+  joinFab: {
+    backgroundColor: colors.gray,
+    bottom: 30,
+  },
+  fabText: {
+    color: "#fff",
+    fontWeight: "bold",
+    marginLeft: 8,
+    fontSize: 16,
+  },
 });
