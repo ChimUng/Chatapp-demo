@@ -49,7 +49,10 @@ function RootLayoutInner() {
           <Stack.Screen name="(chat)" options={{ headerShown: false }} />
         </>
       ) : (
-        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <>
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="signup" options={{ headerShown: false }} /> {/* THÊM DÒNG NÀY */}
+        </>
       )}
     </Stack>
   );

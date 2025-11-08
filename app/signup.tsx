@@ -1,23 +1,23 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, View, TextInput, Image, SafeAreaView, TouchableOpacity, StatusBar, Alert } from "react-native";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/components/config/firebase"; 
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/components/config/firebase"; // Đảm bảo đường dẫn đúng
 import { useRouter } from "expo-router";
 const backImage = require("@/assets/images/backImage.png");
 
-export default function Login() {
+export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
 
-  const onHandleLogin = () => {
+  const onHandleSignup = () => {
     if (email !== "" && password !== "") {
-      signInWithEmailAndPassword(auth, email, password)
+      createUserWithEmailAndPassword(auth, email, password)
         .then(() => {
-          console.log("Login success");
-          router.push("/home"); 
+          console.log("Signup success");
+          router.push("/home"); // Điều hướng tới home sau đăng ký
         })
-        .catch((err) => Alert.alert("Login error", err.message));
+        .catch((err) => Alert.alert("Signup error", err.message));
     } else {
       Alert.alert("Error", "Please enter email and password");
     }
@@ -28,7 +28,7 @@ export default function Login() {
       <Image source={backImage} style={styles.backImage} />
       <View style={styles.whiteSheet} />
       <SafeAreaView style={styles.form}>
-        <Text style={styles.title}>Log In</Text>
+        <Text style={styles.title}>Sign Up</Text>
         <TextInput
           style={styles.input}
           placeholder="Enter email"
@@ -49,13 +49,13 @@ export default function Login() {
           value={password}
           onChangeText={(text) => setPassword(text)}
         />
-        <TouchableOpacity style={styles.button} onPress={onHandleLogin}>
-          <Text style={{ fontWeight: "bold", color: "#fff", fontSize: 18 }}>Log In</Text>
+        <TouchableOpacity style={styles.button} onPress={onHandleSignup}>
+          <Text style={{ fontWeight: "bold", color: "#fff", fontSize: 18 }}>Sign Up</Text>
         </TouchableOpacity>
         <View style={{ marginTop: 20, flexDirection: "row", alignItems: "center", alignSelf: "center" }}>
-          <Text style={{ color: "gray", fontWeight: "600", fontSize: 14 }}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/signup")}>
-            <Text style={{ color: "#f57c00", fontWeight: "600", fontSize: 14 }}>Sign Up</Text>
+          <Text style={{ color: "gray", fontWeight: "600", fontSize: 14 }}>Already have an account? </Text>
+          <TouchableOpacity onPress={() => router.push("/login")}>
+            <Text style={{ color: "#f57c00", fontWeight: "600", fontSize: 14 }}>Log In</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

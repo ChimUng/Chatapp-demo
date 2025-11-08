@@ -33,29 +33,37 @@ export default function Home() {
 
   // Lắng nghe danh sách phòng
   useEffect(() => {
-    const roomsRef = collection(db, "rooms");
-    const unsubscribe = onSnapshot(roomsRef, async (snapshot) => {
-      const list: any[] = [];
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        list.push({ id: docSnap.id, online: data.onlineUsers?.length || 0, max: 40 });
-      }
+  if (!auth.currentUser) return;
 
-      // Tạo default room nếu chưa có
-      if (!list.find((r) => r.id === DEFAULT_ROOM_ID)) {
-        await setDoc(
-          doc(db, "rooms", DEFAULT_ROOM_ID),
-          { maxUsers: 40, onlineUsers: [] },
-          { merge: true }
-        );
-        list.push({ id: DEFAULT_ROOM_ID, online: 0, max: 40 });
-      }
+  const myRoomsRef = collection(db, "users", auth.currentUser.uid, "myRooms");
+  const unsubscribe = onSnapshot(myRoomsRef, async (snapshot) => {
+    const list: any[] = [];
 
-      setRooms(list);
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const roomRef = doc(db, "rooms", data.roomId);
+      const roomSnap = await getDoc(roomRef);
+
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.data();
+        list.push({
+          id: data.roomId,
+          name: roomData.name || data.roomId,
+          online: roomData.onlineUsers?.length || 0,
+          max: roomData.maxUsers || 40,
+        });
+      }
+    }
+
+    // Sắp xếp phòng mới lên đầu
+    list.sort((a, b) => b.online - a.online);
+
+    setRooms(list);
+    setLoading(false);
+  });
+
+  return unsubscribe;
+}, []);
 
   // Join phòng
   const joinRoom = async (roomId: string) => {
@@ -118,7 +126,7 @@ export default function Home() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.room} onPress={() => joinRoom(item.id)}>
-            <Text style={styles.roomName}>{item.id}</Text>
+          <Text style={styles.roomName}>{item.name || item.id}</Text>
             <Text style={styles.online}>{item.online}/40 online</Text>
           </TouchableOpacity>
         )}
