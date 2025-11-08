@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "ChatApp-demo",
+    "slug": "ChatApp-demo",
+    "scheme": "chatappdemo",
+    "android": {
+      "package": "com.duy1907.chatappdemo"
+    },
+    "ios": {
+      "bundleIdentifier": "com.duy1907.chatappdemo"
+    }
+  }
+}
